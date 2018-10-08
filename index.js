@@ -1,10 +1,13 @@
 const puppeteer = require("puppeteer");
 const sortBy = require("lodash/sortBy");
+const storage = require("node-persist");
 const { table } = require("table");
 
 (async () => {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
+
+  await storage.init();
 
   await page.goto("http://weeklypickem.fantasy.nfl.com/group/185836");
 
@@ -28,25 +31,45 @@ const { table } = require("table");
     let weekHasCompletedGames = true;
 
     while (weekHasCompletedGames) {
-      await page.goto(`${player.picksUrl}&week=${weekNumber}`);
-      const correct = (await page.$$(".slider-correct")).length;
-      const incorrect = (await page.$$(".slider-incorrect")).length;
+      const cacheKey = `${player.name}-${weekNumber}`;
+      const cachedWeek = await storage.getItem(cacheKey);
 
-      weekHasCompletedGames = Boolean(correct + incorrect);
+      let correctCount, incorrectCount;
+
+      if (cachedWeek) {
+        correctCount = cachedWeek.correctCount;
+        incorrectCount = cachedWeek.incorrectCount;
+      } else {
+        await page.goto(`${player.picksUrl}&week=${weekNumber}`);
+        correctCount = (await page.$$(".slider-correct")).length;
+        incorrectCount = (await page.$$(".slider-incorrect")).length;
+      }
+
+      weekHasCompletedGames = Boolean(correctCount + incorrectCount);
 
       if (weekHasCompletedGames) {
         let points = 0;
 
         if (weekNumber <= 17) {
-          points = correct;
+          points = correctCount;
         }
 
         player.weeks.push({
-          correct,
+          correctCount,
           overallPoints: 0,
-          incorrect,
+          incorrectCount,
           points
         });
+
+        if (!cachedWeek) {
+          const incompleteCount =
+            (await page.$$(".game-state-active")).length +
+            (await page.$$(".game-state-pre")).length;
+
+          if (!incompleteCount) {
+            await storage.setItem(cacheKey, { correctCount, incorrectCount });
+          }
+        }
 
         console.log(`Week ${weekNumber}: ${points}`);
       }
