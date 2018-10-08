@@ -29,8 +29,9 @@ const { table } = require("table");
 
     let weekNumber = 1;
     let weekHasCompletedGames = true;
+    let weekHasIncompleteGames = false;
 
-    while (weekHasCompletedGames) {
+    while (weekHasCompletedGames && !weekHasIncompleteGames) {
       const cacheKey = `${player.name}-${weekNumber}`;
       const cachedWeek = await storage.getItem(cacheKey);
 
@@ -39,10 +40,15 @@ const { table } = require("table");
       if (cachedWeek) {
         correctCount = cachedWeek.correctCount;
         incorrectCount = cachedWeek.incorrectCount;
+        weekHasIncompleteGames = false;
       } else {
         await page.goto(`${player.picksUrl}&week=${weekNumber}`);
         correctCount = (await page.$$(".slider-correct")).length;
         incorrectCount = (await page.$$(".slider-incorrect")).length;
+        weekHasIncompleteGames = Boolean(
+          (await page.$$(".game-state-active")).length +
+            (await page.$$(".game-state-pre")).length
+        );
       }
 
       weekHasCompletedGames = Boolean(correctCount + incorrectCount);
@@ -61,17 +67,11 @@ const { table } = require("table");
           points
         });
 
-        if (!cachedWeek) {
-          const incompleteCount =
-            (await page.$$(".game-state-active")).length +
-            (await page.$$(".game-state-pre")).length;
-
-          if (!incompleteCount) {
-            await storage.setItem(cacheKey, { correctCount, incorrectCount });
-          }
-        }
-
         console.log(`Week ${weekNumber}: ${points}`);
+      }
+
+      if (!cachedWeek && !weekHasIncompleteGames) {
+        await storage.setItem(cacheKey, { correctCount, incorrectCount });
       }
 
       weekNumber++;
