@@ -3,13 +3,15 @@ const sortBy = require("lodash/sortBy");
 const storage = require("node-persist");
 const { table } = require("table");
 
+const GROUP_ID = process.argv[2] || 185836;
+
 (async () => {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
   await storage.init();
 
-  await page.goto("http://weeklypickem.fantasy.nfl.com/group/185836");
+  await page.goto(`http://weeklypickem.fantasy.nfl.com/group/${GROUP_ID}`);
 
   let players = await page.evaluate(() =>
     [...document.querySelectorAll(".groupEntryName a")].map(el => ({
